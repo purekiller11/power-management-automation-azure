@@ -1,0 +1,266 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflow_name": {
+            "defaultValue": "ans-power-management-automation-la",
+            "type": "String"
+        },
+        "workflow_location": {
+            "defaultValue": "uksouth",
+            "type": "String"
+        },
+        "workflow_tags": {
+            "defaultValue": {
+                "Application": "VM Power Management Automation",
+                "Criticality": "Tier 1",
+                "Owner": "Your Team",
+                "deployedBy": "ARM"
+            },
+            "type": "Object"
+        }
+    },
+    "outputs": {
+        "managed_service_identity_id": {
+            "type": "string",
+            "value": "[reference(parameters('workflow_name'))"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflow_name')]",
+            "location": "[parameters('workflow_location')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {},
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Minute",
+                                "interval": 15,
+                                "startTime": "2020-12-01T00:00:00Z",
+                                "timeZone": "UTC"
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Are_we_in_BST": {
+                            "runAfter": {
+                                "Time": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "method": "GET",
+                                "uri": "https://api.app.ans.co.uk/api/v1/timezones/are-we-in-british-summer-time"
+                            }
+                        },
+                        "For_each_subscription": {
+                            "foreach": "@body('Get_Subscriptions')?['value']",
+                            "actions": {
+                                "For_each_resource_group": {
+                                    "foreach": "@body('Get_Resource_Groups')?['value']",
+                                    "actions": {
+                                        "For_each_virtual_machine": {
+                                            "foreach": "@body('Get_Virtual_Machines')?['value']",
+                                            "actions": {
+                                                "Condition": {
+                                                    "actions": {
+                                                        "Start_VM": {
+                                                            "runAfter": {},
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "authentication": {
+                                                                    "audience": "https://management.azure.com",
+                                                                    "type": "ManagedServiceIdentity"
+                                                                },
+                                                                "method": "POST",
+                                                                "queries": {
+                                                                    "api-version": "2019-03-01"
+                                                                },
+                                                                "uri": "https://management.azure.com/subscriptions/@{items('For_each_subscription')?['subscriptionId']}/resourceGroups/@{items('For_each_resource_group')?['name']}/providers/Microsoft.Compute/virtualMachines/@{items('For_each_virtual_machine')?['name']}/start"
+                                                            }
+                                                        }
+                                                    },
+                                                    "runAfter": {},
+                                                    "else": {
+                                                        "actions": {
+                                                            "Condition_2": {
+                                                                "actions": {
+                                                                    "Stop_VM": {
+                                                                        "runAfter": {},
+                                                                        "type": "Http",
+                                                                        "inputs": {
+                                                                            "authentication": {
+                                                                                "audience": "https://management.azure.com",
+                                                                                "type": "ManagedServiceIdentity"
+                                                                            },
+                                                                            "method": "POST",
+                                                                            "queries": {
+                                                                                "api-version": "2019-03-01"
+                                                                            },
+                                                                            "uri": "https://management.azure.com/subscriptions/@{items('For_each_subscription')?['subscriptionId']}/resourceGroups/@{items('For_each_resource_group')?['name']}/providers/Microsoft.Compute/virtualMachines/@{items('For_each_virtual_machine')?['name']}/powerOff"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "runAfter": {},
+                                                                "expression": {
+                                                                    "and": [
+                                                                        {
+                                                                            "equals": [
+                                                                                "@items('For_each_virtual_machine')?['tags']?['AutoOff']",
+                                                                                "@variables('Time')"
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "type": "If"
+                                                            }
+                                                        }
+                                                    },
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "equals": [
+                                                                    "@items('For_each_virtual_machine')?['tags']?['AutoOn']",
+                                                                    "@variables('Time')"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "type": "If"
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Get_Virtual_Machines": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach"
+                                        },
+                                        "Get_Virtual_Machines": {
+                                            "runAfter": {},
+                                            "type": "Http",
+                                            "inputs": {
+                                                "authentication": {
+                                                    "audience": "https://management.azure.com",
+                                                    "type": "ManagedServiceIdentity"
+                                                },
+                                                "method": "GET",
+                                                "queries": {
+                                                    "api-version": "2020-06-01"
+                                                },
+                                                "uri": "https://management.azure.com/subscriptions/@{items('For_each_subscription')['subscriptionId']}/resourceGroups/@{items('For_each_resource_group')['name']}/providers/Microsoft.Compute/virtualMachines"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Get_Resource_Groups": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Foreach"
+                                },
+                                "Get_Resource_Groups": {
+                                    "runAfter": {},
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://management.azure.com",
+                                            "type": "ManagedServiceIdentity"
+                                        },
+                                        "method": "GET",
+                                        "queries": {
+                                            "api-version": "2020-06-01"
+                                        },
+                                        "uri": "https://management.azure.com/subscriptions/@{items('For_each_subscription')['subscriptionId']}/resourcegroups"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Get_Subscriptions": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Get_Subscriptions": {
+                            "runAfter": {
+                                "If_are_we_in_BST": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "authentication": {
+                                    "audience": "https://management.azure.com",
+                                    "type": "ManagedServiceIdentity"
+                                },
+                                "method": "GET",
+                                "queries": {
+                                    "api-version": "2020-01-01"
+                                },
+                                "uri": "https://management.azure.com/subscriptions"
+                            }
+                        },
+                        "If_are_we_in_BST": {
+                            "actions": {
+                                "Add_1_hour_to_time_if_bst": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "Time",
+                                        "value": "@{addHours(utcNow(), 1, 'HH:mm')}"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Are_we_in_BST": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "@body('Are_we_in_BST')?['Data']",
+                                            "@true"
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If"
+                        },
+                        "Time": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Time",
+                                        "type": "string",
+                                        "value": "@{formatDateTime(utcNow(), 'HH:mm')}"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {}
+            },
+            "tags": "[parameters('workflow_tags')]"
+        }
+    ]
+}
