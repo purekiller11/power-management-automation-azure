@@ -1,0 +1,20 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflow_name": {
+            "value": "ENTER_A_NAME_FOR_THE_LOGIC_APP"
+        },
+        "workflow_location": {
+            "value": "uksouth"
+        },
+        workflow_tags: {
+            "value": {
+                "Application": "VM Power Management Automation",
+                "Criticality": "Tier 1",
+                "Owner": "Your Team",
+                "deployedBy": "ARM"
+            },
+        }
+    }
+}
