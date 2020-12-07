@@ -12,6 +12,9 @@ Or if you prefer commandline;
 2. Ensure you have [az cli](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) installed
 3. Run `az login`
 4. Switch to the correct subscription
+```bash
+az account set -s "YOUR_SUBSCRIPTION_ID"
+```
 5. Create a resource group (optional)
 ```bash
 az group create \
